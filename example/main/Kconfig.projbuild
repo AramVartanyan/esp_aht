@@ -1,0 +1,49 @@
+menu "AHT Sensor Configuration"
+
+    choice
+        prompt "Choose Data Rate"
+        default DR_400 if IDF_TARGET_ESP32
+        default DR_100 if IDF_TARGET_ESP32S2
+        config DR_400
+            bool "400 kbit/s"
+        config DR_100
+            bool "100 kbit/s"
+    endchoice
+
+    config AHT_SPEED
+        int
+        default 400000 if DR_400
+        default 100000 if DR_100
+        help
+            Set the i2c datarate
+            
+    config AHT_SDA
+        int "CLK pin GPIO number"
+        range 0 34
+        default 26 if IDF_TARGET_ESP32
+        default 4 if IDF_TARGET_ESP32S2
+        default 5 if IDF_TARGET_ESP32C3
+        default 2 if IDF_TARGET_ESP8266
+        help
+            GPIO number for CLOCK pin of AHT Sensor.
+            For ESP8266, GPIO 5 is a good choice.
+
+    config AHT_SCL
+        int "DIO pin GPIO number"
+        range 0 34
+        default 27 if IDF_TARGET_ESP32
+        default 5 if IDF_TARGET_ESP32S2
+        default 6 if IDF_TARGET_ESP32C3
+        default 14 if IDF_TARGET_ESP8266
+        help
+            GPIO number for DATA IO pin of AHT Sensor.
+            For ESP8266, GPIO 4 is a good choice.
+            
+    config AHT_MAX_READ_COUNT
+        int "Max read count"
+        range 50 300
+        default 150
+        help
+            Set the max read count -> 50 to 300
+            
+endmenu
