@@ -56,9 +56,6 @@ static uint8_t InitCommand = 0x00;
 //https://github.com/arendst/Tasmota/blob/0650744ac27108931a070918f08173d71ddfd68d/tasmota/xsns_63_aht1x.ino
 //https://github.com/etno712/aht/blob/main/aht.py
 
-#define AHT10_ADDR_R 0x71 //connect GND
-#define AHT10_ADDR_W 0x70 //connect GND
-
 /*
 
 AHT21
@@ -79,13 +76,7 @@ communication -> address + read/write bit
 
 measurement command 0xAC
 wait
-
-
-static const uint8_t AHT10_CMD_SIZE = 1;
-static const uint8_t AHT10_DATA_SIZE = 6;
-static const uint8_t AHT10_CMD_MEASURE_SIZE = 3;
-static const uint8_t AHT10_CMD_MEASURE_B1 = 0x33;
-static const uint8_t AHT10_CMD_MEASURE_B2 = 0x00;
+ 
 */
 
 
@@ -94,28 +85,31 @@ static const uint8_t AHT10_CMD_MEASURE_B2 = 0x00;
 
 #define AHT10_INIT_CMD           0xE1  //initialization command for AHT10/AHT15
 #define AHT20_INIT_CMD           0xBE //initialization command for AHT20
-#define AHT_START_MEASURMENT_CMD 0xAC  //start measurment command
+#define AHT_START_MEASURMENT_CMD 0xAC  //Acquisition Command
+#define AHT_DATA_MEASURMENT_CMD  0x33  //no info in datasheet!!! my guess it is DAC resolution, saw someone send 0x00 instead
 #define AHT_NORMAL_CMD           0xA8  //normal cycle mode command, no info in datasheet!!!
 #define AHT_SOFT_RESET_CMD       0xBA  //soft reset command
 #define AHT_READ_STATUS_CMD      0x71
+#define AHT_WRITE_STATUS_CMD     0x70
 
 #define AHT_INIT_NORMAL_MODE     0x00  //enable normal mode
 #define AHT_INIT_CYCLE_MODE      0x20  //enable cycle mode
 #define AHT_INIT_CMD_MODE        0x40  //enable command mode
 #define AHT_INIT_CAL_ENABLE      0x08  //load factory calibration coeff
 
-
-#define AHT_DATA_MEASURMENT_CMD  0x33  //no info in datasheet!!! my guess it is DAC resolution, saw someone send 0x00 instead
-#define AHT_DATA_NOP             0x00  //no info in datasheet!!!
-
 #define AHT_FORCE_READ_DATA      true  //force to read data
 #define AHT_USE_READ_DATA        false //force to use data from previous read
 #define AHT_ERROR                0xFF  //returns 255, if communication error is occurred
 
-#define AHT_MEASURMENT_DELAY     80    //at least 75 milliseconds
-#define AHT_POWER_ON_DELAY       100    //at least 20..40 milliseconds
-#define AHT_CMD_DELAY            350   //at least 300 milliseconds, no info in datasheet!!!
+#define AHT_MEASURMENT_DELAY     80    //80 milliseconds
+#define AHT_POWER_ON_DELAY       500   //100-500 milliseconds
+#define AHT_CMD_DELAY1           5
+#define AHT_CMD_DELAY2           10
 #define AHT_SOFT_RESET_DELAY     30    //less than 20 milliseconds
+
+#define AHT_JH_RESET_1           0x1B
+#define AHT_JH_RESET_2           0x1C
+#define AHT_JH_RESET_3           0x1E
 
 #define KILOBYTE_CONST           0x100000 //1048576.0f
 
@@ -123,15 +117,15 @@ static const uint8_t AHT10_CMD_MEASURE_B2 = 0x00;
 #define WATER_VAPOR              17.62f
 #define BAROMETRIC_PRESSURE      243.5f
 
-static int SensorWrite(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t len);
-static int SensorRead(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t len);
+static int WriteData(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t len);
+static int ReadData(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t len);
 static uint32_t ReadSensor(bool GetHumidity);
 static int ReadStatus(void);
 
 /**
  * @brief write data buffer to slave
  */
-static int SensorWrite(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t len) {
+static int WriteData(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t len) {
     uint16_t i;
 
     if (!buff)
@@ -170,7 +164,7 @@ static int SensorWrite(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t
 /**
  * @brief read data form slave
  */
-static int SensorRead(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t len) {
+static int ReadData(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t len) {
     uint16_t i, j = 0;
 
     if (!buff)
@@ -231,14 +225,17 @@ static int SensorRead(uint8_t slvaddr, uint8_t regaddr, uint8_t *buff, uint32_t 
 int AhtSensorInitialization(uint8_t SensorType) {
 
     int ret = ESP_OK;
-
-    if (SensorType > 1) {
-        InitCommand = AHT20_INIT_CMD;
-    } else {
-        InitCommand = AHT10_INIT_CMD;
-    }
+    uint8_t result = 0x00;
+    uint8_t Command = 0x00;
+    uint8_t CommandLenght = 3;
+    uint8_t AhtCommands[CommandLenght];
+    uint8_t DataLenght = 3;
+    uint8_t Data[DataLenght];
+    uint8_t *PData = Data;
     
-    uint8_t AhtCommands[] = {InitCommand, AHT_INIT_CAL_ENABLE, AHT_INIT_NORMAL_MODE};
+    /*
+     1. When the power is just turned on, it takes time for the internal chip of the product to be ready, with a delay of 100~500ms, and 500ms is recommended
+     */
     
     vTaskDelay(AHT_POWER_ON_DELAY / portTICK_PERIOD_MS);
     
@@ -263,24 +260,67 @@ int AhtSensorInitialization(uint8_t SensorType) {
         return -EINVAL;
     }
     
-    ret = SensorWrite(AHT_ADDRESS, 0, AhtCommands, 3);
-    
     /*
-    Wire.begin(AHT_ADDRESS);
-    Wire.beginTransmission(AHT_ADDRESS);
-    Wire.write(InitCommand);
-    Wire.write(AHT_INIT_CAL_ENABLE);
-    Wire.write(AHT_INIT_NORMAL_MODE);
-    Wire.endTransmission();
-    */
-
-    vTaskDelay(AHT_POWER_ON_DELAY / portTICK_PERIOD_MS);
+     2. When the power is turned on, send 0x71 to read the status word for the first time, and determine whether the status word is 0x18. If it is not 0x18, initialize the register
+     */
     
-    if((ReadStatus() & 0x18) == 0x18) { //(ReadStatus() & 0x68) == 0x08 - не знам от къде е.
-        ESP_LOGI(TAG, "Sensor initialized");
+    AhtCommands[0] = AHT_NORMAL_CMD;
+    AhtCommands[1] = AHT_INIT_NORMAL_MODE;
+    AhtCommands[2] = AHT_INIT_NORMAL_MODE;
+    ret = WriteData(AHT_ADDRESS, AHT_WRITE_STATUS_CMD, AhtCommands, CommandLenght);
+    
+    vTaskDelay(AHT_CMD_DELAY2 / portTICK_PERIOD_MS); //test 10ms delay
+    
+    if (SensorType > 1) {
+        InitCommand = AHT20_INIT_CMD;
+        ESP_LOGI(TAG, "Sensor is AHT20");
     } else {
-        ESP_LOGE(TAG, "Sensor initialization error");
+        InitCommand = AHT10_INIT_CMD;
+        ESP_LOGI(TAG, "Sensor is AHT10");
+    }
+    
+    AhtCommands[0] = InitCommand;
+    AhtCommands[1] = AHT_INIT_CAL_ENABLE;
+    AhtCommands[2] = AHT_INIT_NORMAL_MODE;
+    ret = WriteData(AHT_ADDRESS, AHT_WRITE_STATUS_CMD, AhtCommands, CommandLenght);
+    
+    vTaskDelay(AHT_CMD_DELAY2 / portTICK_PERIOD_MS); //test 10ms delay
+    
+    result = ReadStatus();
+    
+    if((result & 0x18) == 0x18) {
+        ESP_LOGI(TAG, "Sensor initialized correctly");
+    } else if (!((result & (1 << 3)) != 0)) {
+        ESP_LOGE(TAG, "Sensor is not calibrated");
+    } else {
+        ESP_LOGW(TAG, "Reinitialize the Sensor registers");
         //initialize the 0x1B, 0x1C, 0x1E registers
+        
+        for (uint8_t i = 0; i < 3; i++) {
+            if (i == 0) {
+                Command = AHT_JH_RESET_1; //First 0x1B
+            } else if (i == 1){
+                Command = AHT_JH_RESET_2; //Second 0x1C
+            } else if (i == 2){
+                Command = AHT_JH_RESET_3; //Third 0x1E
+            }
+            
+            AhtCommands[0] = Command;
+            AhtCommands[1] = AHT_INIT_NORMAL_MODE;
+            AhtCommands[2] = AHT_INIT_NORMAL_MODE;
+            ret = WriteData(AHT_ADDRESS, AHT_WRITE_STATUS_CMD, AhtCommands, CommandLenght);
+            
+            vTaskDelay(AHT_CMD_DELAY1 / portTICK_PERIOD_MS); //test 5ms delay
+            
+            ret = ReadData(AHT_ADDRESS, AHT_READ_STATUS_CMD, PData, DataLenght);
+            
+            vTaskDelay(AHT_CMD_DELAY2 / portTICK_PERIOD_MS); //test 10ms delay
+            
+            AhtCommands[0] = 0xB0|Command;
+            AhtCommands[1] = Data[1];
+            AhtCommands[2] = Data[2];
+            ret = WriteData(AHT_ADDRESS, AHT_WRITE_STATUS_CMD, AhtCommands, CommandLenght);
+        }
     }
     
     return ret;
@@ -293,9 +333,8 @@ int AhtSensorInitialization(uint8_t SensorType) {
  * @return float - The temperature in Deg C
  **********************************************************/
 float ReadTemperature(void) {
-    
-    uint32_t Value = ReadSensor(false);
-    return ((float)Value / KILOBYTE_CONST) * 200 - 50;
+    float Value = (float)ReadSensor(false) * 200 / KILOBYTE_CONST - 50;
+    return Value;
 }
 
 /**********************************************************
@@ -307,7 +346,7 @@ float ReadTemperature(void) {
 
 uint8_t ReadHumidity(void) {
     
-    float Value = (float)ReadSensor(true) * 1700 / KILOBYTE_CONST;
+    float Value = (float)ReadSensor(true) * 100 / KILOBYTE_CONST;
     uint8_t ret = Value;
     if (ret > 100) {
         ret = 100;
@@ -316,32 +355,64 @@ uint8_t ReadHumidity(void) {
 }
 
 static uint32_t ReadSensor(bool GetHumidity) {
-
-    uint32_t result;
+    
+    int ret = ESP_OK;
+    uint16_t count = 0;
+    uint32_t result = 0;
+    uint8_t CommandLenght = 3;
+    uint8_t AhtCommands[CommandLenght];
     uint8_t DataLenght = 7;
     uint8_t Data[DataLenght];
     uint8_t *PData = Data;
-    uint8_t AhtCommands[] = {AHT_DATA_MEASURMENT_CMD, AHT_DATA_NOP};
     
-    int ret = SensorWrite(AHT_ADDRESS, AHT_START_MEASURMENT_CMD, AhtCommands, 2);
+    AhtCommands[0] = AHT_START_MEASURMENT_CMD;
+    AhtCommands[1] = AHT_DATA_MEASURMENT_CMD;
+    AhtCommands[2] = AHT_INIT_NORMAL_MODE;
+    
+    ret = WriteData(AHT_ADDRESS, AHT_WRITE_STATUS_CMD, AhtCommands, CommandLenght);
     
     vTaskDelay(AHT_MEASURMENT_DELAY / portTICK_PERIOD_MS);
     
-    ret = ReadStatus();
-    if (ret & 0x80) {
-        vTaskDelay(AHT_MEASURMENT_DELAY / portTICK_PERIOD_MS);
+    //until status bit[7] is 0, indicates idle state, if 1, indicates busy state
+    while ((ReadStatus() & 0x80) == 0x80) {
+        
+        vTaskDelay(AHT_CMD_DELAY2 / portTICK_PERIOD_MS);
+        ESP_LOGE(TAG, "Sensor is busy");
+        
+        if (count >= 15) {
+            ESP_LOGE(TAG, "Measurement timed out");
+            break;
+        }
     }
     
-    ret = SensorRead(AHT_ADDRESS, AHT_READ_STATUS_CMD, PData, DataLenght);
+    ret = ReadData(AHT_ADDRESS, AHT_READ_STATUS_CMD, PData, DataLenght);
+    if (ret != ESP_OK) {
+        return 0;
+    }
+    
+    //Status word, query to the state of 0x98, indicates a busy state, bit [7] is 1;
+    //state 0x1C, or 0x0C, or 0x08 indicates an idle state, bit [7] is 0
+    
     if (Data[0] & 0x80) {
         return 0;
     }
     
     // if GetHumidity is false, read Temperature
     if (GetHumidity) {
-        result = ((Data[1] << 12) | (Data[2] << 4) | Data[3]) >> 4;
+        //result = ((Data[1] << 12) | (Data[2] << 4) | Data[3]) >> 4;
+        result = Data[1];
+        result = result << 8;
+        result += Data[2];
+        result = result << 8;
+        result += Data[3];
+        result = result >> 4;
     } else {
-        result = ((Data[3] & 0x0F) << 16) | (Data[4] << 8) | Data[5];
+        //result = ((Data[3] & 0x0F) << 16) | (Data[4] << 8) | Data[5];
+        result = Data[3] & 0x0F;
+        result = result << 8;
+        result += Data[4];
+        result = result << 8;
+        result += Data[5];
     }
 
     return result;
@@ -350,25 +421,12 @@ static uint32_t ReadSensor(bool GetHumidity) {
 static int ReadStatus(void) {
     uint8_t result = 0x00;
     
-    int ret = SensorRead(AHT_ADDRESS, AHT_READ_STATUS_CMD, &result, 1);
+    int ret = ReadData(AHT_ADDRESS, AHT_READ_STATUS_CMD, &result, 1);
     
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Status read error %d", ret);
     }
     
-    if (!((result & (1 << 3)) != 0)) {
-        ESP_LOGE(TAG, "Sensor is not calibrated");
-    }
-    
-    /*
-    inline AHTx_Status(uint8_t stat) : status(stat) {}
-    inline bool valid() const { return status != 0xFF; }
-    inline bool calibrated() const { return (status & (1 << 3)) != 0; }
-    inline bool busy() const { return (status & (1 << 7)) != 0; }
-
-    Wire.requestFrom(AHT_Sensor_address, 1);
-    result = Wire.read();
-    */
     return result;
 }
 
@@ -376,20 +434,14 @@ int SensorReset(void) {
     
     uint8_t Reset = AHT_SOFT_RESET_CMD;
     
-    //int ret = SensorWrite(AHT_ADDRESS, InitCommand, &Reset, DataLenght);
-    int ret = SensorWrite(AHT_ADDRESS, 0, &Reset, 1);
+    //int ret = WriteData(AHT_ADDRESS, InitCommand, &Reset, DataLenght);
+    int ret = WriteData(AHT_ADDRESS, 0, &Reset, 1);
     
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Sensor reset fail %d", ret);
     }
     vTaskDelay(AHT_SOFT_RESET_DELAY / portTICK_PERIOD_MS);
     
-    /*
-    Wire.beginTransmission(SensorComand); //AHT20_INIT_CMD
-    Wire.write(AHT_SOFT_RESET_CMD);
-    Wire.endTransmission();
-    delay(AHT_SOFT_RESET_DELAY);
-    */
     return ret;
 }
 
