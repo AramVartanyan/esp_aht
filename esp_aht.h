@@ -2,6 +2,7 @@
 //  esp_aht.h
 //
 //  Created by Aram Vartanyan on 4.06.21.
+//  Version 0.2.0
 //
 //  Asair AHT10 / AHT15 / AHT20 / AHT21 temperature and humidity sensors on I2C.
 //

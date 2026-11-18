@@ -2,6 +2,7 @@
 //  esp_aht.c
 //
 //  Created by Aram Vartanyan on 4.06.21.
+//  Version 0.2.0
 //
 
 #include "esp_aht.h"
