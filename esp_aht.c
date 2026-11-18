@@ -23,6 +23,8 @@
 #include "esp32s2/rom/ets_sys.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rom/ets_sys.h"
+#elif CONFIG_IDF_TARGET_ESP32C2
+#include "esp32c2/rom/ets_sys.h"
 #elif CONFIG_IDF_TARGET_ESP8266
 #include "rom/ets_sys.h"
 #endif
@@ -245,7 +247,7 @@ int AhtSensorInitialization(uint8_t SensorType) {
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_io_num = AHT_MASTER_SCL_GPIO,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = AHT_MASTER_FREQ_HZ,
+        .master.clk_speed = AHT_MASTER_FREQ_HZ
     };
     
     ret = i2c_param_config(AHT_MASTER_NUM, &conf);

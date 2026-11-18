@@ -6,6 +6,7 @@ menu "AHT Sensor"
         default 26 if IDF_TARGET_ESP32
         default 4 if IDF_TARGET_ESP32S2
         default 5 if IDF_TARGET_ESP32C3
+        default 6 if IDF_TARGET_ESP32C2
         default 2 if IDF_TARGET_ESP8266
         help
             GPIO number for CLOCK pin of AHT Sensor.
@@ -17,6 +18,7 @@ menu "AHT Sensor"
         default 27 if IDF_TARGET_ESP32
         default 5 if IDF_TARGET_ESP32S2
         default 6 if IDF_TARGET_ESP32C3
+        default 18 if IDF_TARGET_ESP32C2
         default 14 if IDF_TARGET_ESP8266
         help
             GPIO number for DATA IO pin of AHT Sensor.
