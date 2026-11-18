@@ -7,8 +7,6 @@
 #include <stdbool.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <esp_system.h>
-#include <driver/gpio.h>
 #include <esp_log.h>
 
 #include "esp_aht.h"
@@ -16,24 +14,26 @@
 #define TAG "AHT sensor example"
 
 void aht_task(void * arg) {
-    
-    int err = AhtSensorInitialization(AHT21);
+
+    esp_err_t err = ahtInit(AHT21);
     ESP_LOGI(TAG, "AHT Sensor is %s", err ? "not initialized" : "initialized");
-    
+
     while (true) {
-        uint8_t Humidity = ReadHumidity();
-        ESP_LOGI(TAG, "Current Humidity %i", Humidity);
-        //float Humidity = ReadHumidity();
-        //ESP_LOGI(TAG, "Current Humidity %f", Humidity);
-        float Temperature = ReadTemperature();
-        ESP_LOGI(TAG, "Current Temperature %f", Temperature);
-        
+        float Temperature;
+        uint8_t Humidity;
+        err = ahtRead(&Temperature, &Humidity);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Current Temperature %.1f, Humidity %u %%, Dew point %.1f",
+                     Temperature, Humidity, ahtDewPoint(Temperature, Humidity));
+        } else {
+            ESP_LOGE(TAG, "Read error: %s", esp_err_to_name(err));
+        }
+
         vTaskDelay(10000 / portTICK_PERIOD_MS);
-	}
+    }
 }
 
-void app_main()
+void app_main(void)
 {
-	xTaskCreate(&aht_task, "aht_task", 4096, NULL, 5, NULL);
+    xTaskCreate(&aht_task, "aht_task", 4096, NULL, 5, NULL);
 }
-

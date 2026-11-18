@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2025 AVartanyan
+Copyright (c) 2025 Aram Vartanyan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Parts of this library are based on the AHT20 driver of Espressif (Apache License 2.0) and on the
+Asair (Aosong) AHT demo program.

@@ -1,0 +1,5 @@
+version: "0.2.0"
+description: Driver for the Asair AHT10 / AHT15 / AHT20 / AHT21 temperature and humidity sensors (I2C)
+url: https://github.com/AramVartanyan/esp_aht
+dependencies:
+  idf: ">=4.3"
